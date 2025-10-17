@@ -1,0 +1,124 @@
+# Example hooks.toml configuration
+# This file shows common patterns for hook definitions
+
+# =============================================================================
+# INDIVIDUAL HOOKS
+# =============================================================================
+
+# Basic hook with file targeting
+[hooks.format-check]
+command = ["cargo", "fmt", "--all", "--", "--check"]
+description = "Check Rust code formatting"
+modifies_repository = false
+files = ["**/*.rs"]
+execution_type = "other"
+
+# Hook with dependencies
+[hooks.clippy-check]
+command = ["cargo", "clippy", "--all-targets", "--", "-D", "warnings"]
+description = "Run Clippy linting (after formatting)"
+modifies_repository = false
+files = ["**/*.rs", "Cargo.toml"]
+depends_on = ["format-check"]
+execution_type = "other"
+
+# Test runner with in-place execution
+[hooks.test-all]
+command = ["cargo", "test", "--all"]
+description = "Run all tests"
+modifies_repository = false
+execution_type = "in-place"
+files = ["**/*.rs", "Cargo.toml"]
+depends_on = ["clippy-check"]
+
+# Hook that always runs regardless of files
+[hooks.security-audit]
+command = ["cargo", "audit"]
+description = "Security audit (always runs)"
+modifies_repository = false
+execution_type = "other"
+run_always = true
+
+# Secret scanning with custom tool
+[hooks.secret-scan]
+command = ["gitleaks", "detect", "--source=.", "--verbose", "--no-banner"]
+description = "Scan for secrets in repository"
+modifies_repository = false
+execution_type = "other"
+run_always = true
+
+# Per-file hook (default execution type)
+[hooks.python-lint]
+command = ["ruff", "check"]
+description = "Lint Python files"
+modifies_repository = false
+files = ["**/*.py"]
+# execution_type = "per-file" is default, can be omitted
+
+# Hook with environment variables
+[hooks.custom-build]
+command = ["make", "build"]
+description = "Build project with custom settings"
+modifies_repository = true
+workdir = "{REPO_ROOT}"
+env = { BUILD_MODE = "debug", TARGET_DIR = "{HOOK_DIR}/target" }
+execution_type = "in-place"
+
+# Hook using template variables for file handling
+[hooks.custom-check]
+command = ["sh", "-c", "echo 'Checking files:' && cat {CHANGED_FILES_FILE}"]
+description = "Custom check with file list"
+modifies_repository = false
+files = ["**/*.rs"]
+execution_type = "other"
+
+# =============================================================================
+# HOOK GROUPS
+# =============================================================================
+
+# Sequential execution (respects dependencies)
+[groups.rust-pipeline]
+includes = ["format-check", "clippy-check", "test-all"]
+execution = "sequential"
+description = "Rust validation pipeline: format → lint → test"
+
+# Parallel execution (safe for read-only hooks)
+[groups.security-suite]
+includes = ["security-audit", "secret-scan"]
+execution = "parallel"
+description = "Security checks (run in parallel)"
+
+# Main pre-commit group
+[groups.pre-commit]
+includes = ["rust-pipeline", "security-suite"]
+execution = "parallel"
+description = "Pre-commit validation: rust checks + security"
+
+# Quick pre-push validation
+[groups.pre-push]
+includes = ["clippy-check", "test-all", "security-suite"]
+execution = "parallel"
+description = "Quick validation before push"
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+# Execution types:
+# - per-file (default): Files passed as args → command file1 file2 file3
+# - in-place: Runs once in config dir → command (tool auto-discovers files)
+# - other: Manual handling via {CHANGED_FILES} template variables
+
+# File targeting:
+# - files = [...] → Only run if matching files changed
+# - run_always = true → Always run regardless of changes
+# - No files field → Always run
+
+# Dependencies:
+# - depends_on = [...] → Runs after dependencies complete successfully
+# - Groups respect individual hook dependencies
+
+# Execution strategies:
+# - sequential: One after another (respects dependencies)
+# - parallel: Safe hooks parallel, modifying hooks sequential
+# - force-parallel: All parallel (dangerous, can cause conflicts)

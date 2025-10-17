@@ -1,0 +1,4 @@
+Git hooks installed in this repository:
+  - pre-commit
+  - pre-push
+  - commit-msg

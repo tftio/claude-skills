@@ -1,0 +1,39 @@
+{
+  "imports": [
+    {
+      "file": "../hooks.lib.toml",
+      "status": "success",
+      "hooks_imported": [
+        "rust-format",
+        "rust-lint",
+        "rust-test",
+        "backend-pipeline"
+      ],
+      "groups_imported": [
+        "backend-pipeline"
+      ]
+    },
+    {
+      "file": ".hooks/common.toml",
+      "status": "success",
+      "hooks_imported": [
+        "security-scan",
+        "secret-scan"
+      ],
+      "groups_imported": [
+        "security-suite"
+      ]
+    }
+  ],
+  "overrides": [
+    {
+      "name": "rust-lint",
+      "type": "hook",
+      "original_source": "../hooks.lib.toml",
+      "override_source": "./hooks.toml",
+      "reason": "local definition takes precedence"
+    }
+  ],
+  "cycles": [],
+  "unused": []
+}

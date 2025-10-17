@@ -1,0 +1,23 @@
+🏥 peter-hook health check
+==========================
+
+Git Repository:
+  ✅ Git repository found
+  ✅ Git hooks installed
+
+Configuration:
+  ✅ hooks.toml found
+  ✅ Configuration valid
+  ℹ️  Found 12 hooks/groups:
+    - clippy-check
+    - format-check
+    - rust-test
+    - security-scan
+    - secret-scan
+    - pre-commit
+    - pre-push
+
+Updates:
+  ✅ Running latest version (v3.2.1)
+
+✅ Everything looks healthy!
