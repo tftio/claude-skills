@@ -1,5 +1,5 @@
 ---
-name: planning-architect
+name: plan-architect
 description: Creates structured multi-phase project plans with requirements gathering, phase breakdown, and documentation. Use when planning features, breaking down complex work, designing architecture, or creating project roadmaps. Proactively invoked when user requests planning, architecture design, or feature breakdowns.
 tools: Read, Write, Bash
 model: sonnet
