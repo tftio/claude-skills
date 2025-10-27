@@ -1,278 +1,427 @@
 ---
 name: asana
-description: Interface for Asana project management using asana-cli. Use this skill when users want to find tasks, update tickets, create new tasks, list projects, check task status, search for work, manage dependencies, or perform any Asana-related work management operations.
+description: Interface for Asana project management using asana-cli. Use this skill when users want to find tasks, update tickets, create new tasks, list projects, check task status, search for work, manage dependencies, or perform any Asana-related work management operations. (project, gitignored)
 ---
 
-# Asana Project Management
+# Asana Skill
 
-This skill provides access to Asana project management through the asana-cli command-line tool located at `$HOME/.local/bin/asana-cli`.
+Interface for interacting with Asana through the `asana-cli` command-line tool. This skill enables comprehensive Asana operations including tasks, projects, sections, tags, custom fields, and batch operations.
 
-## When to Use This Skill
+## Tool Location
 
-- Searching for tasks or tickets (fuzzy search)
-- Creating new tasks or tickets
-- Updating existing tasks (status, assignee, notes, dates, etc.)
-- Listing projects or workspaces
-- Checking task details
-- Managing task assignments and followers
-- Managing subtasks and dependencies
-- Querying task status or progress
-- Batch operations on multiple tasks
+**Binary:** `$HOME/.local/bin/asana-cli`
 
-## CLI Tool Location
-
-The asana-cli binary is located at: `$HOME/.local/bin/asana-cli`
-
-Always use the full path `$HOME/.local/bin/asana-cli` when executing commands.
-
-## Command Structure
-
-All commands follow this pattern:
+**Verify Installation:**
 ```bash
-$HOME/.local/bin/asana-cli <command> <subcommand> [OPTIONS] [ARGS]
+$HOME/.local/bin/asana-cli --version
+$HOME/.local/bin/asana-cli doctor
 ```
 
-Main commands:
-- `task` - Task operations (list, show, create, update, delete, search)
-- `project` - Project operations (list, show, create, update, delete)
-- `config` - Manage configuration
-- `doctor` - Check health and configuration
+**Configuration:** `~/.config/asana-cli/config.toml` (Linux/macOS)
+
+## Authentication
+
+### Setup Personal Access Token
+
+```bash
+# Interactively set token (prompted securely)
+$HOME/.local/bin/asana-cli config set token
+
+# Or provide token directly
+$HOME/.local/bin/asana-cli config set token --token "your_pat_here"
+
+# Test token validity
+$HOME/.local/bin/asana-cli config test
+
+# View configuration (token redacted)
+$HOME/.local/bin/asana-cli config get
+```
+
+### Environment Variables
+
+- `ASANA_PAT` - Personal Access Token (overrides config file)
+- `ASANA_WORKSPACE` - Default workspace GID
+- `ASANA_BASE_URL` - API base URL override (for testing)
+- `ASANA_CLI_CONFIG_HOME` - Config directory override
+- `ASANA_CLI_DATA_HOME` - Data directory override
+
+### Default Configuration
+
+```bash
+# Set default workspace
+$HOME/.local/bin/asana-cli config set workspace --workspace "1234567890"
+
+# Set default assignee
+$HOME/.local/bin/asana-cli config set assignee --assignee "user@example.com"
+```
+
+## Output Formats
+
+All list/show commands support multiple output formats via `--output`:
+
+- `table` - Human-readable table (default in interactive mode)
+- `json` - JSON for scripting and programmatic use (RECOMMENDED for parsing)
+- `csv` - Comma-separated values for spreadsheet import
+- `markdown` - Markdown-formatted tables for documentation
+
+**Example:**
+```bash
+$HOME/.local/bin/asana-cli task list --output json
+$HOME/.local/bin/asana-cli project list --output csv
+```
 
 ## Task Operations
 
 ### Listing Tasks
 
 ```bash
-# List all tasks
+# Basic list (uses defaults from config)
 $HOME/.local/bin/asana-cli task list
 
-# List incomplete tasks only
-$HOME/.local/bin/asana-cli task list --completed false
+# Filter by project
+$HOME/.local/bin/asana-cli task list --project "1234567890"
 
-# List completed tasks
+# Filter by section within a project
+$HOME/.local/bin/asana-cli task list --project "1234567890" --section "9876543210"
+
+# Filter by assignee (email or GID)
+$HOME/.local/bin/asana-cli task list --assignee "user@example.com"
+$HOME/.local/bin/asana-cli task list --assignee "1234567890"
+
+# Filter by completion status
+$HOME/.local/bin/asana-cli task list --completed false
 $HOME/.local/bin/asana-cli task list --completed true
 
-# List tasks for specific assignee (use email or gid)
-$HOME/.local/bin/asana-cli task list --assignee user@example.com
-
-# List tasks in a specific project
-$HOME/.local/bin/asana-cli task list --project PROJECT_GID
-
-# List tasks with workspace filter
-$HOME/.local/bin/asana-cli task list --workspace WORKSPACE_GID
-
-# List with due date filters
+# Filter by due date
 $HOME/.local/bin/asana-cli task list --due-before "2025-12-31"
 $HOME/.local/bin/asana-cli task list --due-after "2025-01-01"
-
-# Sort tasks (name, due_on, created_at, modified_at, assignee)
-$HOME/.local/bin/asana-cli task list --sort due_on
-
-# Limit number of results
-$HOME/.local/bin/asana-cli task list --limit 20
 
 # Include subtasks
 $HOME/.local/bin/asana-cli task list --include-subtasks
 
-# Output as JSON for parsing
-$HOME/.local/bin/asana-cli task list --output json
+# Sort and limit results
+$HOME/.local/bin/asana-cli task list --sort due_on --limit 10
+# Sort options: name, due_on, created_at, modified_at, assignee
+
+# Request additional fields
+$HOME/.local/bin/asana-cli task list --fields custom_fields --fields tags
+
+# JSON output for parsing
+$HOME/.local/bin/asana-cli task list --output json --completed false
 ```
 
 ### Searching Tasks
 
 ```bash
-# Fuzzy search for tasks
-$HOME/.local/bin/asana-cli task search "keyword"
+# Full-text search (requires workspace)
+$HOME/.local/bin/asana-cli task search --workspace "1234567890" --query "bug fix"
 
-# Search within workspace
-$HOME/.local/bin/asana-cli task search "keyword" --workspace WORKSPACE_GID
+# Search with filters
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --query "authentication" \
+  --assignee "user@example.com" \
+  --completed false
 
-# Search with limit
-$HOME/.local/bin/asana-cli task search "keyword" --limit 10
+# Search by date ranges
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --created-after "2025-01-01" \
+  --due-before "2025-12-31"
 
-# Search recent tasks only
-$HOME/.local/bin/asana-cli task search "keyword" --recent-only
+# Filter by task properties
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --blocked true \
+  --has-attachments true
 
-# Output as JSON
-$HOME/.local/bin/asana-cli task search "keyword" --output json
+# Sort and limit search results
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --query "performance" \
+  --sort-by modified_at \
+  --sort-ascending \
+  --limit 20
+# Sort options: modified_at, likes, created_at
 ```
 
 ### Showing Task Details
 
 ```bash
-# Show task details (gid is the task identifier)
-$HOME/.local/bin/asana-cli task show TASK_GID
+# Show task details
+$HOME/.local/bin/asana-cli task show "1234567890"
 
-# Show with additional fields
-$HOME/.local/bin/asana-cli task show TASK_GID --fields comments --fields attachments
+# Request additional fields
+$HOME/.local/bin/asana-cli task show "1234567890" --fields custom_fields --fields tags
 
-# Output as JSON for parsing
-$HOME/.local/bin/asana-cli task show TASK_GID --output json
+# JSON output for parsing
+$HOME/.local/bin/asana-cli task show "1234567890" --output json
 ```
 
 ### Creating Tasks
 
 ```bash
-# Create a basic task (name is required)
-$HOME/.local/bin/asana-cli task create --name "Task title"
+# Basic task creation
+$HOME/.local/bin/asana-cli task create \
+  --name "Fix authentication bug" \
+  --workspace "1234567890"
 
-# Create with workspace
-$HOME/.local/bin/asana-cli task create --name "Task title" --workspace WORKSPACE_GID
+# Create with full details
+$HOME/.local/bin/asana-cli task create \
+  --name "Implement user dashboard" \
+  --workspace "1234567890" \
+  --project "9876543210" \
+  --section "5555555555" \
+  --assignee "user@example.com" \
+  --notes "Design requirements in PRD doc" \
+  --due-on "next Friday" \
+  --tag "feature" \
+  --tag "frontend"
 
-# Create with project
-$HOME/.local/bin/asana-cli task create --name "Task title" --project PROJECT_GID
-
-# Create with assignee (email or gid)
-$HOME/.local/bin/asana-cli task create --name "Task title" --assignee user@example.com
-
-# Create with notes (plain text)
-$HOME/.local/bin/asana-cli task create --name "Task title" --notes "Task description"
+# Create subtask
+$HOME/.local/bin/asana-cli task create \
+  --name "Write unit tests" \
+  --parent "1234567890" \
+  --assignee "user@example.com"
 
 # Create with HTML notes
-$HOME/.local/bin/asana-cli task create --name "Task title" --html-notes "<p>HTML description</p>"
+$HOME/.local/bin/asana-cli task create \
+  --name "Documentation update" \
+  --workspace "1234567890" \
+  --html-notes "<p>Update the <strong>API docs</strong></p>"
 
-# Create with due date (natural language accepted)
-$HOME/.local/bin/asana-cli task create --name "Task title" --due-on "tomorrow"
-$HOME/.local/bin/asana-cli task create --name "Task title" --due-on "2025-12-31"
+# Create with custom fields
+$HOME/.local/bin/asana-cli task create \
+  --name "Deploy to production" \
+  --workspace "1234567890" \
+  --custom-field "Priority=High" \
+  --custom-field "Environment=Production"
 
-# Create with due date and time
-$HOME/.local/bin/asana-cli task create --name "Task title" --due-at "2025-12-31 14:00"
-
-# Create with start date
-$HOME/.local/bin/asana-cli task create --name "Task title" --start-on "2025-01-01"
-
-# Create with tags
-$HOME/.local/bin/asana-cli task create --name "Task title" --tag TAG_GID
-
-# Create with followers
-$HOME/.local/bin/asana-cli task create --name "Task title" --follower user@example.com
-
-# Create as subtask
-$HOME/.local/bin/asana-cli task create --name "Subtask title" --parent PARENT_TASK_GID
-
-# Create with section
-$HOME/.local/bin/asana-cli task create --name "Task title" --project PROJECT_GID --section SECTION_GID
-
-# Interactive mode (prompts for missing values)
+# Interactive creation (prompts for missing values)
 $HOME/.local/bin/asana-cli task create --interactive
 
-# Output as JSON
-$HOME/.local/bin/asana-cli task create --name "Task title" --output json
+# Natural language dates accepted
+# Examples: "tomorrow", "next Monday", "2025-12-31", "in 2 weeks"
 ```
 
 ### Updating Tasks
 
 ```bash
-# Mark task complete
-$HOME/.local/bin/asana-cli task update TASK_GID --complete
-
-# Mark task incomplete
-$HOME/.local/bin/asana-cli task update TASK_GID --incomplete
-
 # Update task name
-$HOME/.local/bin/asana-cli task update TASK_GID --name "New task name"
+$HOME/.local/bin/asana-cli task update "1234567890" --name "New task name"
 
-# Update notes (plain text)
-$HOME/.local/bin/asana-cli task update TASK_GID --notes "Updated notes"
+# Assign/reassign task
+$HOME/.local/bin/asana-cli task update "1234567890" --assignee "user@example.com"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-assignee
 
-# Clear notes
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-notes
+# Mark complete/incomplete
+$HOME/.local/bin/asana-cli task update "1234567890" --complete
+$HOME/.local/bin/asana-cli task update "1234567890" --incomplete
 
-# Update with HTML notes
-$HOME/.local/bin/asana-cli task update TASK_GID --html-notes "<p>Updated HTML</p>"
+# Update due dates (natural language accepted)
+$HOME/.local/bin/asana-cli task update "1234567890" --due-on "next Friday"
+$HOME/.local/bin/asana-cli task update "1234567890" --due-at "2025-12-31 14:00"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-due-on
 
-# Reassign task
-$HOME/.local/bin/asana-cli task update TASK_GID --assignee user@example.com
-
-# Remove assignee
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-assignee
-
-# Update due date (natural language accepted)
-$HOME/.local/bin/asana-cli task update TASK_GID --due-on "next Friday"
-$HOME/.local/bin/asana-cli task update TASK_GID --due-on "2025-12-31"
-
-# Clear due date
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-due-on
-
-# Update due date with time
-$HOME/.local/bin/asana-cli task update TASK_GID --due-at "2025-12-31 14:00"
-
-# Update start date
-$HOME/.local/bin/asana-cli task update TASK_GID --start-on "2025-01-01"
-
-# Set parent task (make it a subtask)
-$HOME/.local/bin/asana-cli task update TASK_GID --parent PARENT_TASK_GID
-
-# Remove parent
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-parent
+# Update notes
+$HOME/.local/bin/asana-cli task update "1234567890" --notes "Updated description"
+$HOME/.local/bin/asana-cli task update "1234567890" --html-notes "<p>HTML content</p>"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-notes
 
 # Update tags (replaces existing)
-$HOME/.local/bin/asana-cli task update TASK_GID --tag TAG_GID
-
-# Clear all tags
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-tags
+$HOME/.local/bin/asana-cli task update "1234567890" --tag "bug" --tag "urgent"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-tags
 
 # Update followers (replaces existing)
-$HOME/.local/bin/asana-cli task update TASK_GID --follower user@example.com
+$HOME/.local/bin/asana-cli task update "1234567890" --follower "user1@example.com" --follower "user2@example.com"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-followers
 
 # Update project associations (replaces existing)
-$HOME/.local/bin/asana-cli task update TASK_GID --project PROJECT_GID
-
-# Clear projects
-$HOME/.local/bin/asana-cli task update TASK_GID --clear-projects
+$HOME/.local/bin/asana-cli task update "1234567890" --project "9876543210"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-projects
 
 # Update custom fields
-$HOME/.local/bin/asana-cli task update TASK_GID --custom-field "Priority=High"
+$HOME/.local/bin/asana-cli task update "1234567890" --custom-field "Status=In Progress" --custom-field "Priority=High"
 
-# Output as JSON
-$HOME/.local/bin/asana-cli task update TASK_GID --complete --output json
+# Set/clear parent task
+$HOME/.local/bin/asana-cli task update "1234567890" --parent "9999999999"
+$HOME/.local/bin/asana-cli task update "1234567890" --clear-parent
 ```
 
 ### Deleting Tasks
 
 ```bash
-# Delete a task
-$HOME/.local/bin/asana-cli task delete TASK_GID
+# Delete a task permanently
+$HOME/.local/bin/asana-cli task delete "1234567890"
 ```
 
 ### Batch Operations
 
 ```bash
-# Create multiple tasks from structured input
-$HOME/.local/bin/asana-cli task create-batch
+# Create multiple tasks from JSON file
+$HOME/.local/bin/asana-cli task create-batch --file tasks.json
 
-# Update multiple tasks from structured input
-$HOME/.local/bin/asana-cli task update-batch
+# Create from CSV file
+$HOME/.local/bin/asana-cli task create-batch --file tasks.csv
 
-# Complete multiple tasks from structured input
-$HOME/.local/bin/asana-cli task complete-batch
+# Continue on errors
+$HOME/.local/bin/asana-cli task create-batch --file tasks.json --continue-on-error
+
+# Update multiple tasks from file
+$HOME/.local/bin/asana-cli task update-batch --file updates.json
+
+# Complete multiple tasks
+$HOME/.local/bin/asana-cli task complete-batch --file task_ids.json
 ```
 
-### Managing Subtasks
-
-```bash
-# See subtask help
-$HOME/.local/bin/asana-cli task subtasks --help
+**JSON Batch Format Example:**
+```json
+[
+  {
+    "name": "Task 1",
+    "workspace": "1234567890",
+    "assignee": "user@example.com",
+    "due_on": "2025-12-31"
+  },
+  {
+    "name": "Task 2",
+    "workspace": "1234567890",
+    "notes": "Description here"
+  }
+]
 ```
 
-### Managing Dependencies
+### Subtasks
 
 ```bash
-# Manage tasks this task depends on
-$HOME/.local/bin/asana-cli task depends-on --help
+# List subtasks
+$HOME/.local/bin/asana-cli task subtasks list "1234567890"
 
-# Manage tasks blocked by this task
-$HOME/.local/bin/asana-cli task blocks --help
+# Create subtask
+$HOME/.local/bin/asana-cli task subtasks create "1234567890" \
+  --name "Subtask name" \
+  --assignee "user@example.com"
+
+# Convert task to subtask
+$HOME/.local/bin/asana-cli task subtasks convert "1234567890" --parent "9876543210"
+
+# Detach subtask (make it a top-level task)
+$HOME/.local/bin/asana-cli task subtasks convert "1234567890" --detach
 ```
 
-### Managing Task Projects and Followers
+### Dependencies
 
 ```bash
-# Manage project memberships
-$HOME/.local/bin/asana-cli task projects --help
+# List tasks this task depends on
+$HOME/.local/bin/asana-cli task depends-on list "1234567890"
 
-# Manage task followers
-$HOME/.local/bin/asana-cli task followers --help
+# Add dependency (this task depends on another)
+$HOME/.local/bin/asana-cli task depends-on add "1234567890" "9876543210"
+
+# Remove dependency
+$HOME/.local/bin/asana-cli task depends-on remove "1234567890" "9876543210"
+
+# List tasks blocked by this task
+$HOME/.local/bin/asana-cli task blocks list "1234567890"
+
+# Add dependent (another task depends on this one)
+$HOME/.local/bin/asana-cli task blocks add "1234567890" "9876543210"
+
+# Remove dependent
+$HOME/.local/bin/asana-cli task blocks remove "1234567890" "9876543210"
+```
+
+### Project Memberships
+
+```bash
+# List projects containing this task
+$HOME/.local/bin/asana-cli task projects list "1234567890"
+
+# Add task to project
+$HOME/.local/bin/asana-cli task projects add "1234567890" "9876543210"
+
+# Add to project in specific section
+$HOME/.local/bin/asana-cli task projects add "1234567890" "9876543210" --section "5555555555"
+
+# Remove from project
+$HOME/.local/bin/asana-cli task projects remove "1234567890" "9876543210"
+```
+
+### Followers
+
+```bash
+# List task followers
+$HOME/.local/bin/asana-cli task followers list "1234567890"
+
+# Add followers
+$HOME/.local/bin/asana-cli task followers add "1234567890" "user@example.com"
+
+# Remove followers
+$HOME/.local/bin/asana-cli task followers remove "1234567890" "user@example.com"
+```
+
+### Tags
+
+```bash
+# List tags on task
+$HOME/.local/bin/asana-cli task tags list "1234567890"
+
+# Add tag to task
+$HOME/.local/bin/asana-cli task tags add "1234567890" "urgent"
+
+# Remove tag from task
+$HOME/.local/bin/asana-cli task tags remove "1234567890" "urgent"
+```
+
+### Comments (Stories)
+
+```bash
+# List comments on task
+$HOME/.local/bin/asana-cli task comments list "1234567890"
+
+# Add comment
+$HOME/.local/bin/asana-cli task comments add "1234567890" --text "This looks great!"
+
+# Show specific comment
+$HOME/.local/bin/asana-cli task comments show "comment_gid"
+
+# Update comment
+$HOME/.local/bin/asana-cli task comments update "comment_gid" --text "Updated comment"
+
+# Delete comment
+$HOME/.local/bin/asana-cli task comments delete "comment_gid"
+```
+
+### Attachments
+
+```bash
+# List attachments on task
+$HOME/.local/bin/asana-cli task attachments list "1234567890"
+
+# Upload attachment
+$HOME/.local/bin/asana-cli task attachments upload "1234567890" --file "/path/to/file.pdf"
+
+# Show attachment details
+$HOME/.local/bin/asana-cli task attachments show "attachment_gid"
+
+# Delete attachment
+$HOME/.local/bin/asana-cli task attachments delete "attachment_gid"
+```
+
+### Moving Tasks Between Sections
+
+```bash
+# Move task to section
+$HOME/.local/bin/asana-cli task move-to-section "1234567890" --section "5555555555"
+
+# Move with position control
+$HOME/.local/bin/asana-cli task move-to-section "1234567890" \
+  --section "5555555555" \
+  --insert-before "9876543210"
+
+$HOME/.local/bin/asana-cli task move-to-section "1234567890" \
+  --section "5555555555" \
+  --insert-after "9876543210"
 ```
 
 ## Project Operations
@@ -283,216 +432,538 @@ $HOME/.local/bin/asana-cli task followers --help
 # List all projects
 $HOME/.local/bin/asana-cli project list
 
-# List projects in workspace
-$HOME/.local/bin/asana-cli project list --workspace WORKSPACE_GID
+# Filter by workspace
+$HOME/.local/bin/asana-cli project list --workspace "1234567890"
 
-# List projects for team
-$HOME/.local/bin/asana-cli project list --team TEAM_GID
+# Filter by team
+$HOME/.local/bin/asana-cli project list --team "9876543210"
 
-# Filter by archived status
+# Filter archived projects
 $HOME/.local/bin/asana-cli project list --archived false
+$HOME/.local/bin/asana-cli project list --archived true
 
-# Sort projects (name, created_at, modified_at)
+# Sort results
 $HOME/.local/bin/asana-cli project list --sort name
+$HOME/.local/bin/asana-cli project list --sort created_at
+$HOME/.local/bin/asana-cli project list --sort modified_at
+
+# Inline filtering
+$HOME/.local/bin/asana-cli project list --filter "name~Frontend"
+$HOME/.local/bin/asana-cli project list --filter "archived=false" --filter "workspace=1234567890"
+
+# Use saved filter
+$HOME/.local/bin/asana-cli project list --filter-saved "active-projects"
+
+# Save filter for reuse
+$HOME/.local/bin/asana-cli project list \
+  --filter "workspace=1234567890" \
+  --filter "archived=false" \
+  --save-filter "active-projects"
 
 # Limit results
-$HOME/.local/bin/asana-cli project list --limit 20
+$HOME/.local/bin/asana-cli project list --limit 10
 
-# Use inline filter expressions
-$HOME/.local/bin/asana-cli project list --filter "name~Engineering"
+# Request additional fields
+$HOME/.local/bin/asana-cli project list --fields custom_fields --fields members
 
-# Output as JSON
+# JSON output
 $HOME/.local/bin/asana-cli project list --output json
 ```
+
+**Filter Expression Syntax:**
+- `field=value` - Exact match
+- `field!=value` - Not equal
+- `field~regex` - Regex match
+- `field:substring` - Contains substring
 
 ### Showing Project Details
 
 ```bash
 # Show project details
-$HOME/.local/bin/asana-cli project show PROJECT_GID
+$HOME/.local/bin/asana-cli project show "1234567890"
 
-# Output as JSON
-$HOME/.local/bin/asana-cli project show PROJECT_GID --output json
+# Request additional fields
+$HOME/.local/bin/asana-cli project show "1234567890" --fields custom_fields --fields members
+
+# JSON output
+$HOME/.local/bin/asana-cli project show "1234567890" --output json
 ```
 
 ### Creating Projects
 
 ```bash
-# See create help
-$HOME/.local/bin/asana-cli project create --help
+# Basic project creation
+$HOME/.local/bin/asana-cli project create \
+  --name "New Project" \
+  --workspace "1234567890"
+
+# Create with full details
+$HOME/.local/bin/asana-cli project create \
+  --name "Q1 2025 Roadmap" \
+  --workspace "1234567890" \
+  --team "9876543210" \
+  --notes "Project charter and requirements" \
+  --owner "user@example.com" \
+  --start-on "2025-01-01" \
+  --due-on "2025-03-31" \
+  --public true
+
+# Add members during creation
+$HOME/.local/bin/asana-cli project create \
+  --name "Team Project" \
+  --workspace "1234567890" \
+  --member "user1@example.com" \
+  --member "user2@example.com"
+
+# Create with custom fields
+$HOME/.local/bin/asana-cli project create \
+  --name "Client Engagement" \
+  --workspace "1234567890" \
+  --custom-field "Status=Planning" \
+  --custom-field "Budget=50000"
+
+# Create from template (bundled or custom)
+$HOME/.local/bin/asana-cli project create \
+  --template standard_project \
+  --var project_name="CLI Demo" \
+  --var workspace_gid="1234567890" \
+  --var team_gid="9876543210" \
+  --var owner_email="user@example.com"
+
+# Interactive creation
+$HOME/.local/bin/asana-cli project create --interactive
 ```
 
 ### Updating Projects
 
 ```bash
-# See update help
-$HOME/.local/bin/asana-cli project update --help
+# Update project name
+$HOME/.local/bin/asana-cli project update "1234567890" --name "Updated Name"
+
+# Update notes/description
+$HOME/.local/bin/asana-cli project update "1234567890" --notes "New description"
+
+# Update dates
+$HOME/.local/bin/asana-cli project update "1234567890" --start-on "2025-01-01" --due-on "2025-12-31"
+
+# Change owner
+$HOME/.local/bin/asana-cli project update "1234567890" --owner "user@example.com"
+
+# Archive/unarchive
+$HOME/.local/bin/asana-cli project update "1234567890" --archived true
+$HOME/.local/bin/asana-cli project update "1234567890" --archived false
+
+# Update visibility
+$HOME/.local/bin/asana-cli project update "1234567890" --public false
+```
+
+### Deleting Projects
+
+```bash
+# Delete project permanently
+$HOME/.local/bin/asana-cli project delete "1234567890"
 ```
 
 ### Managing Project Members
 
 ```bash
-# Manage project members
-$HOME/.local/bin/asana-cli project members --help
+# List project members
+$HOME/.local/bin/asana-cli project members list "1234567890"
+
+# Add member
+$HOME/.local/bin/asana-cli project members add "1234567890" "user@example.com"
+
+# Remove member
+$HOME/.local/bin/asana-cli project members remove "1234567890" "user@example.com"
 ```
 
-## Configuration and Health
+## Section Operations
 
 ```bash
-# Check CLI health and configuration
+# List sections in a project
+$HOME/.local/bin/asana-cli section list --project "1234567890"
+
+# Show section details
+$HOME/.local/bin/asana-cli section show "5555555555"
+
+# Create section
+$HOME/.local/bin/asana-cli section create --project "1234567890" --name "In Progress"
+
+# List tasks in section
+$HOME/.local/bin/asana-cli section tasks "5555555555"
+```
+
+## Tag Operations
+
+```bash
+# List tags in workspace
+$HOME/.local/bin/asana-cli tag list --workspace "1234567890"
+
+# Show tag details
+$HOME/.local/bin/asana-cli tag show "tag_gid"
+
+# Create tag
+$HOME/.local/bin/asana-cli tag create --workspace "1234567890" --name "urgent"
+
+# Update tag
+$HOME/.local/bin/asana-cli tag update "tag_gid" --name "high-priority"
+
+# Delete tag
+$HOME/.local/bin/asana-cli tag delete "tag_gid"
+```
+
+## Custom Field Operations
+
+```bash
+# List custom fields in workspace
+$HOME/.local/bin/asana-cli custom-field list --workspace "1234567890"
+
+# Show custom field details
+$HOME/.local/bin/asana-cli custom-field show "field_gid"
+```
+
+## Workspace Operations
+
+```bash
+# List workspaces for current user
+$HOME/.local/bin/asana-cli workspace list
+
+# Show workspace details
+$HOME/.local/bin/asana-cli workspace show "1234567890"
+
+# JSON output
+$HOME/.local/bin/asana-cli workspace list --output json
+```
+
+## User Operations
+
+```bash
+# List users in workspace
+$HOME/.local/bin/asana-cli user list --workspace "1234567890"
+
+# Show user details
+$HOME/.local/bin/asana-cli user show "user_gid"
+$HOME/.local/bin/asana-cli user show "user@example.com"
+
+# Show current authenticated user
+$HOME/.local/bin/asana-cli user me
+
+# JSON output
+$HOME/.local/bin/asana-cli user list --output json
+```
+
+## Common Workflows
+
+### Daily Task Review
+
+```bash
+# Check your incomplete tasks
+$HOME/.local/bin/asana-cli task list \
+  --assignee "me" \
+  --completed false \
+  --sort due_on \
+  --output table
+
+# Find overdue tasks
+$HOME/.local/bin/asana-cli task list \
+  --assignee "me" \
+  --completed false \
+  --due-before "today" \
+  --output table
+```
+
+### Project Setup
+
+```bash
+# 1. Create project from template
+PROJECT_ID=$($HOME/.local/bin/asana-cli project create \
+  --template standard_project \
+  --var project_name="Q1 Roadmap" \
+  --var workspace_gid="1234567890" \
+  --output json | jq -r '.gid')
+
+# 2. Add team members
+$HOME/.local/bin/asana-cli project members add "$PROJECT_ID" "user1@example.com"
+$HOME/.local/bin/asana-cli project members add "$PROJECT_ID" "user2@example.com"
+
+# 3. Create initial tasks
+$HOME/.local/bin/asana-cli task create \
+  --name "Project kickoff meeting" \
+  --project "$PROJECT_ID" \
+  --assignee "user1@example.com" \
+  --due-on "next Monday"
+```
+
+### Bulk Task Updates
+
+```bash
+# 1. Export tasks to JSON
+$HOME/.local/bin/asana-cli task list \
+  --project "1234567890" \
+  --output json > tasks.json
+
+# 2. Process with jq or script
+jq '.[] | select(.assignee==null) | .gid' tasks.json > unassigned.txt
+
+# 3. Update in batch
+while read task_id; do
+  $HOME/.local/bin/asana-cli task update "$task_id" --assignee "user@example.com"
+done < unassigned.txt
+```
+
+### Finding Blocked Work
+
+```bash
+# Find tasks that are blocked
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --blocked true \
+  --completed false \
+  --output table
+
+# Show dependencies for a task
+$HOME/.local/bin/asana-cli task depends-on list "1234567890"
+```
+
+### Sprint Planning
+
+```bash
+# 1. List ready tasks
+$HOME/.local/bin/asana-cli task search \
+  --workspace "1234567890" \
+  --project "1234567890" \
+  --completed false \
+  --output json > ready_tasks.json
+
+# 2. Move selected tasks to "Sprint" section
+SECTION_ID="5555555555"
+cat ready_tasks.json | jq -r '.[] | .gid' | while read task_id; do
+  $HOME/.local/bin/asana-cli task move-to-section "$task_id" --section "$SECTION_ID"
+done
+```
+
+### Reporting
+
+```bash
+# Export project tasks to CSV for reporting
+$HOME/.local/bin/asana-cli task list \
+  --project "1234567890" \
+  --output csv > project_report.csv
+
+# Get task counts by assignee
+$HOME/.local/bin/asana-cli task list \
+  --project "1234567890" \
+  --output json | \
+  jq -r 'group_by(.assignee.name) | map({assignee: .[0].assignee.name, count: length})'
+```
+
+## Troubleshooting
+
+### Verify Installation and Auth
+
+```bash
+# Check CLI health
 $HOME/.local/bin/asana-cli doctor
 
-# Manage configuration
-$HOME/.local/bin/asana-cli config --help
+# Test configuration
+$HOME/.local/bin/asana-cli config test
 
-# Show version
-$HOME/.local/bin/asana-cli version
+# View config (token redacted)
+$HOME/.local/bin/asana-cli config get
 ```
 
-## Output Formats
+### Common Issues
 
-The CLI supports multiple output formats via `--output`:
-
-- `table` - Human-readable table (default for interactive use)
-- `json` - JSON format for scripting and parsing
-- `csv` - CSV export
-- `markdown` - Markdown tables
-
-**Always use `--output json` when you need to parse the output programmatically.**
-
-## Important Notes
-
-### Task Identifiers
-
-- Task identifiers are called "gid" (global ID)
-- Always use the gid returned from search/list operations
-- Don't guess or construct gids
-
-### Natural Language Dates
-
-The CLI accepts natural language for dates:
-- "tomorrow", "next Friday", "in 2 weeks"
-- ISO format: "2025-12-31"
-- With time: "2025-12-31 14:00"
-
-### Email vs GID
-
-Many fields accept either:
-- Email addresses: `user@example.com`
-- GID identifiers: `1234567890`
-
-Use email when available as it's more user-friendly.
-
-## Workflow Guidelines
-
-### Before Running Commands
-
-1. **Check CLI availability**: Verify the tool is accessible with `asana-cli doctor`
-2. **Get help if uncertain**: Use `--help` on any command/subcommand
-3. **Use JSON output for parsing**: Add `--output json` when you need structured data
-
-### When Searching for Work
-
-1. Start with `task search` for fuzzy matching
-2. Use `task list` with filters for precise queries
-3. Use `--output json` to parse results
-4. Present results clearly to the user with task gid, name, status, assignee
-
-### When Creating Tasks
-
-1. Minimum required field is `--name`
-2. Use `--workspace` or `--project` to specify location
-3. Natural language works for dates: `--due-on "next Friday"`
-4. Use `--output json` to capture the created task's gid
-
-### When Updating Tasks
-
-1. First fetch task details with `task show TASK_GID`
-2. Show user what will change
-3. Use specific flags: `--complete`, `--name`, `--assignee`, etc.
-4. Use `--clear-*` flags to remove values
-
-### Error Handling
-
-If a command fails:
-1. Check the error message for details
-2. Verify authentication with `asana-cli doctor`
-3. Confirm gids are valid (from search/list results)
-4. Check command syntax with `--help`
-
-## Example Workflows
-
-### Finding Your Incomplete Tasks
-
+**Authentication Errors:**
 ```bash
-# List incomplete tasks assigned to you
-$HOME/.local/bin/asana-cli task list --assignee me --completed false --output json
+# Token expired or invalid
+$HOME/.local/bin/asana-cli config set token  # Re-enter token
+$HOME/.local/bin/asana-cli config test  # Verify
 
-# Show details for specific task
-$HOME/.local/bin/asana-cli task show TASK_GID --output json
+# Or use environment variable
+export ASANA_PAT="your_new_token"
+$HOME/.local/bin/asana-cli config test
 ```
 
-### Searching and Completing a Task
+**Permission Errors:**
+- Ensure PAT has required scopes for operations
+- Check workspace/project access permissions in Asana web UI
 
+**Not Found Errors:**
+- Verify GIDs are correct using `--output json`
+- Check resource hasn't been deleted
+- Ensure you have access to the workspace/project
+
+**Rate Limiting:**
+- CLI handles rate limits automatically with retries
+- Consider reducing `--limit` values for large queries
+- Use caching (automatic) for repeated queries
+
+### Debug Mode
+
+Enable verbose logging via environment variable:
 ```bash
-# Search for task
-$HOME/.local/bin/asana-cli task search "feature request" --output json
-
-# Mark it complete
-$HOME/.local/bin/asana-cli task update TASK_GID --complete
-```
-
-### Creating and Assigning a Task
-
-```bash
-# List available projects
-$HOME/.local/bin/asana-cli project list --output json
-
-# Create task with full details
-$HOME/.local/bin/asana-cli task create \
-  --name "Implement new feature" \
-  --notes "Detailed description here" \
-  --project PROJECT_GID \
-  --assignee engineer@company.com \
-  --due-on "next Friday" \
-  --output json
-```
-
-### Finding Overdue Tasks
-
-```bash
-# List tasks due before today
-$HOME/.local/bin/asana-cli task list --due-before "today" --completed false --output json
+RUST_LOG=debug $HOME/.local/bin/asana-cli task list
 ```
 
 ## Best Practices
 
-1. **Always use `--output json` for parsing**: Makes data extraction reliable
-2. **Use gids from search/list results**: Never guess or construct gids
-3. **Leverage natural language dates**: More intuitive than ISO format
-4. **Check configuration first**: Run `doctor` if authentication fails
-5. **Use email addresses**: More user-friendly than gids for assignees
-6. **Verify before destructive operations**: Show task details before updating/deleting
-7. **Respect rate limits**: Don't execute rapid sequential API calls
+### Use JSON for Scripting
 
-## Troubleshooting
+Always use `--output json` when parsing CLI output in scripts:
+```bash
+# Good - reliable structured data
+TASK_GID=$($HOME/.local/bin/asana-cli task create --name "Test" --workspace "123" --output json | jq -r '.gid')
 
-- **Command not found**: Verify `$HOME/.local/bin/asana-cli` exists and is executable
-- **Permission denied**: Check file permissions: `ls -l $HOME/.local/bin/asana-cli`
-- **Authentication errors**: Run `$HOME/.local/bin/asana-cli doctor` to check config
-- **Invalid gid**: Use `task search` or `task list` to get valid gids
-- **API errors**: Check error message details, may indicate rate limits or permissions
+# Bad - parsing table output is fragile
+# Don't do this
+```
+
+### Leverage Saved Filters
+
+Save frequently used filters to reduce typing:
+```bash
+# Save filter
+$HOME/.local/bin/asana-cli project list \
+  --filter "workspace=1234567890" \
+  --filter "archived=false" \
+  --save-filter "active"
+
+# Reuse filter
+$HOME/.local/bin/asana-cli project list --filter-saved "active"
+```
+
+### Use Natural Language for Dates
+
+The CLI accepts natural language for date inputs:
+- `"today"`, `"tomorrow"`, `"next Friday"`
+- `"in 2 weeks"`, `"next month"`
+- `"2025-12-31"` (ISO format also supported)
+
+### Default Workspace and Assignee
+
+Set defaults to reduce command verbosity:
+```bash
+$HOME/.local/bin/asana-cli config set workspace --workspace "1234567890"
+$HOME/.local/bin/asana-cli config set assignee --assignee "me@example.com"
+
+# Now these work without flags
+$HOME/.local/bin/asana-cli task list
+$HOME/.local/bin/asana-cli task create --name "Quick task"
+```
+
+### Batch Operations for Efficiency
+
+Use batch operations for bulk changes:
+```bash
+# Better - single batch operation
+$HOME/.local/bin/asana-cli task create-batch --file tasks.json
+
+# Slower - individual creates in loop
+# Avoid for > 5 tasks
+```
+
+### Request Only Needed Fields
+
+Minimize API usage by requesting only required fields:
+```bash
+# If you need custom fields
+$HOME/.local/bin/asana-cli task list --fields custom_fields
+
+# If you need everything
+$HOME/.local/bin/asana-cli task list --fields custom_fields --fields tags --fields memberships
+```
 
 ## Advanced Features
 
-The CLI supports advanced operations:
+### Templates
 
-- **Subtasks**: Create hierarchical task structures with `--parent`
-- **Dependencies**: Manage task dependencies and blockers
-- **Batch operations**: Create/update/complete multiple tasks at once
-- **Custom fields**: Set organization-specific fields with `--custom-field`
-- **Followers**: Subscribe users to task notifications with `--follower`
-- **Filter expressions**: Use inline filters with project list operations
-- **Shell completions**: Generate with `asana-cli completions`
+Templates support variable substitution for project creation:
 
-Explore these with `--help` on specific subcommands.
+**Standard Template (bundled):**
+```bash
+$HOME/.local/bin/asana-cli project create \
+  --template standard_project \
+  --var project_name="My Project" \
+  --var workspace_gid="1234567890"
+```
+
+**Custom Templates:**
+Place in `~/.local/share/asana-cli/templates/custom.toml`:
+```toml
+name = "{{project_name}}"
+workspace = "{{workspace_gid}}"
+owner = "{{owner_email}}"
+
+[[sections]]
+name = "Backlog"
+
+[[sections]]
+name = "In Progress"
+
+[[sections]]
+name = "Done"
+```
+
+### Inline Filters
+
+Use filter expressions for complex queries:
+```bash
+# Regex matching
+$HOME/.local/bin/asana-cli project list --filter "name~^Frontend"
+
+# Substring search
+$HOME/.local/bin/asana-cli project list --filter "name:Dashboard"
+
+# Multiple conditions
+$HOME/.local/bin/asana-cli project list \
+  --filter "workspace=1234567890" \
+  --filter "archived=false" \
+  --filter "name~2025"
+```
+
+### Caching
+
+CLI caches API responses automatically:
+- Cache location: `~/.local/share/asana-cli/cache/`
+- Offline mode: Works with cached data when network unavailable
+- Cache cleared on config changes
+
+## Shell Completions
+
+Generate completion scripts for your shell:
+```bash
+# Bash
+$HOME/.local/bin/asana-cli completions bash > ~/.local/share/bash-completion/completions/asana-cli
+
+# Zsh
+$HOME/.local/bin/asana-cli completions zsh > /usr/local/share/zsh/site-functions/_asana-cli
+
+# Fish
+$HOME/.local/bin/asana-cli completions fish > ~/.config/fish/completions/asana-cli.fish
+
+# PowerShell
+$HOME/.local/bin/asana-cli completions powershell > ~/Documents/PowerShell/Scripts/asana-cli.ps1
+```
+
+## Version Information
+
+```bash
+# Show version
+$HOME/.local/bin/asana-cli version
+
+# Show license
+$HOME/.local/bin/asana-cli license
+
+# Update to latest version
+$HOME/.local/bin/asana-cli update
+```
+
+## Additional Resources
+
+- [asana-cli Repository](https://github.com/tftio/asana-cli)
+- [Asana API Documentation](https://developers.asana.com/docs)
+- Configuration: `~/.config/asana-cli/config.toml`
+- Cache: `~/.local/share/asana-cli/cache/`
+- Templates: `~/.local/share/asana-cli/templates/`
+- Filters: `~/.local/share/asana-cli/filters/`
