@@ -4,9 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains Claude Skills - modular capability definitions that teach Claude how to interact with external tools and services. Each skill is a self-contained directory with documentation that Claude loads when relevant operations are requested.
+This repository contains Claude Skills and workflow agents packaged as Claude Code plugins. Skills are modular capability definitions that teach Claude how to interact with external tools and services. Agents are specialized workflow templates that combine multiple skills for complex tasks. The plugin system enables easy distribution and installation via marketplaces.
 
 **Repository:** `git@github.com:tftio/claude-skills.git`
+
+### Architecture Levels
+
+1. **Skills** (Agent Skills Spec 1.0) - Individual capabilities that Claude uses autonomously
+2. **Agents** - Specialized workflow templates that combine skills for complex tasks
+3. **Plugins** - Distribution packaging that bundles skills and agents for marketplace installation
 
 ## Architecture
 
@@ -29,17 +35,56 @@ skill-name/
 
 ### Current Skills
 
+Skills in the `skills/` directory:
+
 1. **asana/** - Asana project management via `$HOME/.local/bin/asana-cli`
 2. **github/** - GitHub operations via `gh` CLI
 3. **prompt/** - Load prompter profiles to apply engineering standards mid-session
 4. **versioneer/** - Version management with semantic versioning support
+5. **peter-hook/** - Git hooks management via `peter-hook` CLI
 
 ### Agent Definitions
 
-Agent definitions are in the `agents/` directory and define specialized workflows:
+Agents in the `agents/` directory are specialized workflow templates using SKILL.md format:
 
-1. **planning-architect.md** - Creates structured multi-phase project plans with requirements gathering
-2. **plan-executor.md** - Executes documented plans with git integration and progress tracking
+1. **plan-architect/** - Creates structured multi-phase project plans with requirements gathering
+2. **plan-executor/** - Executes documented plans with git integration and progress tracking
+3. **greybeard/** - Senior engineering code reviewer focused on maintainability and tech debt prevention
+4. **infrastructure-auditor/** - Infrastructure as Code quality auditor for Terraform, Docker, GitHub Actions
+5. **pr-auditor/** - Pull request auditor for Python/FastAPI/PostgreSQL projects
+6. **python-auditor/** - Python code quality auditor using project standards
+
+**Note:** Agents are skills that define specialized workflows. They use the same SKILL.md format but focus on orchestrating complex, multi-step processes rather than wrapping single CLI tools.
+
+### Slash Commands
+
+The plugin includes slash commands for explicit invocation of workflow agents:
+
+| Command | Agent | Purpose |
+|---------|-------|---------|
+| `/create-plan` | plan-architect | Create structured multi-phase project plans |
+| `/execute-plan` | plan-executor | Execute documented plans with git integration |
+| `/review-code` | greybeard | Senior engineering code review for maintainability |
+| `/audit-python` | python-auditor | Python code quality audit against standards |
+| `/audit-infrastructure` | infrastructure-auditor | IaC quality audit (Terraform, Docker, Actions) |
+| `/review-pr` | pr-auditor | Pull request review with tracker integration |
+
+**How slash commands work:**
+- User types `/command-name` for explicit invocation
+- Command loads corresponding agent skill
+- Agent executes with full workflow instructions
+- Also available: natural language ("execute the auth plan") triggers agents autonomously
+
+**Example:**
+```bash
+# Explicit via slash command
+/execute-plan auth-feature
+
+# Implicit via natural language
+claude "Execute the plan in docs/plans/auth-feature"
+```
+
+Both invoke the same agent, both work identically.
 
 ## Working with Skills
 
@@ -81,32 +126,85 @@ When updating skills after CLI tool changes:
 - **Scope requirements**: Note when commands need special auth scopes
 - **Context awareness**: Explain when repo context matters vs when `--repo` is needed
 
-## Agent Definitions
+## Plugin System
 
-Agent definitions in `agents/` are specialized workflow templates that combine skills with specific methodologies:
+### What Are Plugins?
 
-**Structure:**
-```yaml
----
-name: agent-name
-description: What it does and when to use it
-tools: Read, Write, Edit, Bash  # Available tools
-model: sonnet                    # Recommended model
----
+Plugins are a **packaging and distribution mechanism** for bundling related skills and agents together. They enable marketplace-based installation and team distribution. Plugins do NOT replace skills - they organize and distribute them.
+
+**Key relationship:**
+- **Skills** = Individual capabilities (the actual functionality)
+- **Plugins** = Bundles of related skills (the packaging/distribution)
+- **Agents** = Workflow-focused skills (specialized multi-step processes)
+
+### Plugin Structure
+
+This repository defines plugins in `.claude-plugin/marketplace.json`:
+
+```json
+{
+  "name": "tftio-claude-skills",
+  "owner": { "name": "tftio", "email": "jfb@tftio.com" },
+  "metadata": {
+    "description": "Professional development and project management skills",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "development-tools",
+      "description": "GitHub, version management, and git hooks",
+      "skills": ["./skills/github", "./skills/versioneer", "./skills/peter-hook"]
+    },
+    {
+      "name": "workflow-agents",
+      "description": "Specialized workflow agents for planning and execution",
+      "skills": ["./agents/plan-architect", "./agents/plan-executor", ...]
+    }
+  ]
+}
 ```
 
-**planning-architect**: Creates multi-phase project plans
-- Gathers requirements through questioning
-- Loads technical standards via prompt skill
-- Creates `docs/plans/{name}/` with overview.md and phase_*.md files
-- Documents rationale, assumptions, and acceptance criteria
+### Installing the Plugin
 
-**plan-executor**: Delivers planned work systematically
-- Reads plans from `docs/plans/`
-- Creates phase branches, commits work, updates trackers
-- Integrates with GitHub issues and Asana tasks
-- Follows loaded technical standards
-- Uses versioneer for version management
+**For local development (recommended):**
+```bash
+# Install plugin via symlink (uses justfile)
+just install
+
+# Check installation status
+just status
+
+# Reinstall after changes
+just reinstall
+
+# Uninstall
+just uninstall
+
+# Validate structure
+just validate
+```
+
+**From marketplace (future):**
+```bash
+# Add this repository as a marketplace
+/plugin marketplace add tftio/claude-skills
+
+# Install the plugin
+/plugin install tftio-dev-tools@tftio
+```
+
+### The Unified Plugin: tftio-dev-tools
+
+This repository provides a single comprehensive plugin containing:
+
+**CLI Tool Skills (5):**
+- asana, github, prompt, versioneer, peter-hook
+
+**Workflow Agents (6):**
+- plan-architect, plan-executor, greybeard, infrastructure-auditor, pr-auditor, python-auditor
+
+**Slash Commands (6):**
+- /create-plan, /execute-plan, /review-code, /audit-python, /audit-infrastructure, /review-pr
 
 ## Permissions Model
 
@@ -134,14 +232,31 @@ Permissions are configured in `.claude/settings.local.json`:
 
 When adding new skills, update permissions to allow the tool's commands.
 
-## Skill Installation
+## Migration to Plugin System (January 2025)
 
-Skills in this repository can be installed to Claude Code in two ways:
+This repository was migrated from standalone skills/agents to the unified plugin system:
 
-1. **Copy**: `cp -r skill-name ~/.claude/skills/`
-2. **Symlink**: `ln -s $(pwd)/skill-name ~/.claude/skills/skill-name`
+**What Changed:**
+- Added `.claude-plugin/marketplace.json` for plugin definition
+- Converted agent `.md` files to `agent-name/SKILL.md` subdirectories
+- Consolidated 4 separate plugins into 1 comprehensive plugin
+- Created 6 slash commands for explicit agent invocation
+- Updated justfile for plugin-based installation
 
-Symlinks are preferred during development to keep changes in version control.
+**What Stayed The Same:**
+- Skills remain SKILL.md files with YAML frontmatter (Agent Skills Spec 1.0)
+- Agents are still skills, just workflow-focused
+- Individual skill/agent functionality unchanged
+- Agents work autonomously AND via slash commands
+
+**Why This Architecture?**
+- **Single plugin** - One installation gets everything
+- **Slash commands** - Explicit invocation for complex workflows
+- **Autonomous triggering** - Natural language still works
+- **Professional packaging** - Ready for marketplace distribution
+- **Development friendly** - `just install` symlinks entire repo
+
+The plugin system is purely a distribution enhancement, not an architectural shift.
 
 ## Design Philosophy
 
@@ -250,9 +365,23 @@ These resources were used to understand the Claude Skills system and architectur
 
 ### Key Concepts
 
-From the research:
-- Skills are folders with instructions, scripts, and resources that Claude loads dynamically
-- Progressive disclosure: Only frontmatter is loaded initially (few tokens), full content loaded when relevant
-- Skills are composable: Multiple skills can be active simultaneously
+From the research (January 2025):
+- **Agent Skills Spec 1.0** is the current standard (released October 2025)
+- Skills are folders with SKILL.md files containing instructions and resources
+- Progressive disclosure: Only frontmatter loaded initially, full content when relevant
+- Skills are composable: Multiple skills active simultaneously
 - Skills are portable: Same format works across Claude.ai, Claude Code, and API
-- Skills can execute code: Provide reliability for tasks where code is more reliable than token generation
+- **Plugins** are packaging/distribution, not a replacement for skills
+- **Agents** (this repo's term) are workflow-focused skills using the same SKILL.md format
+- **Subagents** (Anthropic API term) refers to using smaller models as helpers
+
+### Skills vs Plugins vs Agents
+
+| Concept | Purpose | Format | Invocation |
+|---------|---------|--------|------------|
+| **Skill** | Individual capability | SKILL.md with YAML frontmatter | Model-invoked (Claude decides) |
+| **Agent** | Workflow orchestration | SKILL.md (same as skill) | Model-invoked (Claude decides) |
+| **Plugin** | Distribution packaging | marketplace.json | User-installed |
+| **Slash Command** | Explicit user action | command.md | User-invoked (/command) |
+
+**Note:** This repository's "agents" are skills that focus on workflows rather than tool wrapping. They're not a separate concept in the Agent Skills Spec - just our organizational pattern.

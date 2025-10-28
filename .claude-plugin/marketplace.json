@@ -1,0 +1,40 @@
+{
+  "name": "tftio-dev-tools",
+  "owner": {
+    "name": "tftio",
+    "email": "jfb@tftio.com"
+  },
+  "metadata": {
+    "description": "Complete development workflow toolkit: CLI skills, workflow agents, and slash commands for professional software engineering",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "tftio-dev-tools",
+      "description": "Professional development toolkit with CLI tool wrappers (GitHub, Asana, Versioneer, Peter-hook, Prompter), workflow orchestration agents (planning, execution, code review, auditing), and convenient slash commands for explicit invocation",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/asana",
+        "./skills/github",
+        "./skills/prompt",
+        "./skills/versioneer",
+        "./skills/peter-hook",
+        "./agents/plan-architect",
+        "./agents/plan-executor",
+        "./agents/greybeard",
+        "./agents/infrastructure-auditor",
+        "./agents/pr-auditor",
+        "./agents/python-auditor"
+      ],
+      "commands": [
+        "./commands/create-plan.md",
+        "./commands/execute-plan.md",
+        "./commands/review-code.md",
+        "./commands/audit-python.md",
+        "./commands/audit-infrastructure.md",
+        "./commands/review-pr.md"
+      ]
+    }
+  ]
+}

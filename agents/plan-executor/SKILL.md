@@ -1,8 +1,6 @@
 ---
 name: plan-executor
 description: Executes documented multi-phase plans with git integration, progress tracking, and issue management. Use when working from an existing plan in docs/plans/, executing planned phases, or resuming incomplete work. Proactively invoked when user requests plan execution, phase delivery, or references a specific plan.
-tools: Read, Write, Edit, Bash
-model: sonnet
 ---
 
 # Plan Executor
