@@ -1,1 +1,4 @@
 .claude/settings.local.json
+
+# Work tracking metadata (worktree-specific, model-managed only)
+.work-metadata.toml

@@ -1,0 +1,339 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "tomli-w>=1.0.0",
+# ]
+# ///
+"""
+Create .work-metadata.toml file for work tracking integration.
+
+This script links a worktree to Asana tasks and GitHub Projects for automated
+tracking by Claude Code skills and agents.
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+
+def run_command(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    """Run a command and return the result."""
+    try:
+        return subprocess.run(
+            cmd,
+            check=check,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}", file=sys.stderr)
+        print(f"stdout: {e.stdout}", file=sys.stderr)
+        print(f"stderr: {e.stderr}", file=sys.stderr)
+        raise
+
+
+def get_git_remote_url() -> str:
+    """Get the GitHub remote URL from git config."""
+    result = run_command(["git", "config", "--get", "remote.origin.url"])
+    url = result.stdout.strip()
+
+    # Convert SSH to HTTPS format
+    if url.startswith("git@github.com:"):
+        url = url.replace("git@github.com:", "https://github.com/")
+
+    # Remove .git suffix
+    url = url.removesuffix(".git")
+
+    return url
+
+
+def get_repo_name_from_url(url: str) -> str:
+    """Extract repository name from GitHub URL."""
+    # https://github.com/owner/repo -> repo
+    parts = url.rstrip("/").split("/")
+    return parts[-1]
+
+
+def parse_asana_task(task_input: str) -> str:
+    """Parse Asana task URL or GID and return full URL."""
+    # If it's already a URL, return as-is
+    if task_input.startswith("https://app.asana.com/"):
+        return task_input
+
+    # If it's just a GID, we can't construct the full URL without project GID
+    # So return the GID and let the user provide the full URL if needed
+    if task_input.isdigit():
+        print(f"Warning: Using task GID '{task_input}'. Full URL recommended.", file=sys.stderr)
+        return task_input
+
+    # Try to extract GID from URL-like input
+    match = re.search(r"(\d{15,})", task_input)
+    if match:
+        return match.group(1)
+
+    return task_input
+
+
+def parse_github_project(project_input: str) -> str:
+    """Parse GitHub Project URL or number and return normalized form."""
+    # If it's a full URL, return as-is
+    if project_input.startswith("https://github.com/"):
+        return project_input
+
+    # If it's just a number, return as-is (will be used with repo URL later)
+    if project_input.isdigit():
+        return project_input
+
+    return project_input
+
+
+def create_github_project(name: str, owner: str) -> Optional[str]:
+    """Create a GitHub Project using gh CLI."""
+    print(f"Creating GitHub Project '{name}' for {owner}...")
+
+    try:
+        # Create project
+        result = run_command([
+            "gh", "project", "create",
+            "--owner", owner,
+            "--title", name,
+            "--format", "json"
+        ])
+
+        project_data = json.loads(result.stdout)
+        project_number = project_data.get("number")
+
+        if project_number:
+            print(f"✓ Created GitHub Project #{project_number}")
+            return str(project_number)
+        else:
+            print("Warning: Project created but couldn't extract number", file=sys.stderr)
+            return None
+
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to create GitHub Project: {e}", file=sys.stderr)
+        return None
+
+
+def get_github_user() -> str:
+    """Get the current GitHub user from gh CLI."""
+    result = run_command(["gh", "api", "user", "--jq", ".login"])
+    return result.stdout.strip()
+
+
+def prompt_for_input(prompt: str, default: Optional[str] = None) -> str:
+    """Prompt user for input with optional default."""
+    if default:
+        response = input(f"{prompt} [{default}]: ").strip()
+        return response or default
+    else:
+        response = input(f"{prompt}: ").strip()
+        return response
+
+
+def create_work_metadata(
+    asana_task: str,
+    github_project: str,
+    github_url: str,
+    project_name: str,
+    assignee: Optional[str] = None,
+    labels: Optional[list[str]] = None,
+) -> dict:
+    """Create the work metadata dictionary."""
+    return {
+        "project": {
+            "name": project_name,
+            "github_url": github_url,
+        },
+        "work": {
+            "asana_task": asana_task,
+            "github_project": github_project,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "tracking": {
+            "default_assignee": assignee or "",
+            "default_labels": labels or [],
+        },
+    }
+
+
+def write_toml_file(data: dict, path: Path) -> None:
+    """Write data to TOML file."""
+    import tomli_w
+
+    with open(path, "wb") as f:
+        tomli_w.dump(data, f)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Create .work-metadata.toml for work tracking integration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # With Asana URL and GitHub Project number
+  %(prog)s --asana-ticket https://app.asana.com/0/123/456 --github-project 42
+
+  # With GIDs/numbers only
+  %(prog)s --asana-ticket 9876543210 --github-project 15
+
+  # Create new GitHub Project
+  %(prog)s --asana-ticket https://app.asana.com/0/123/456 --create-project "Auth Feature"
+
+  # Interactive mode (prompts for all values)
+  %(prog)s --interactive
+""",
+    )
+
+    parser.add_argument(
+        "--asana-ticket",
+        help="Asana task URL or GID",
+    )
+
+    parser.add_argument(
+        "--github-project",
+        help="GitHub Project URL or number",
+    )
+
+    parser.add_argument(
+        "--create-project",
+        metavar="NAME",
+        help="Create a new GitHub Project with this name",
+    )
+
+    parser.add_argument(
+        "--assignee",
+        help="Default GitHub assignee (username)",
+    )
+
+    parser.add_argument(
+        "--labels",
+        help="Default labels (comma-separated)",
+    )
+
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Interactive mode (prompts for all values)",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(".work-metadata.toml"),
+        help="Output file path (default: .work-metadata.toml)",
+    )
+
+    args = parser.parse_args()
+
+    # Check if we're in a git repo
+    try:
+        run_command(["git", "rev-parse", "--git-dir"])
+    except subprocess.CalledProcessError:
+        print("Error: Not in a git repository", file=sys.stderr)
+        sys.exit(1)
+
+    # Check if file already exists
+    if args.output.exists():
+        response = input(f"{args.output} already exists. Overwrite? [y/N]: ").strip().lower()
+        if response not in ("y", "yes"):
+            print("Aborted.")
+            sys.exit(0)
+
+    # Get git info
+    github_url = get_git_remote_url()
+    project_name = get_repo_name_from_url(github_url)
+
+    print(f"Repository: {github_url}")
+    print(f"Project: {project_name}")
+    print()
+
+    # Get Asana task
+    if args.interactive or not args.asana_ticket:
+        asana_task = prompt_for_input("Asana task URL or GID")
+    else:
+        asana_task = args.asana_ticket
+
+    asana_task = parse_asana_task(asana_task)
+
+    # Get or create GitHub Project
+    github_project = None
+
+    if args.create_project:
+        # Create new project
+        owner = get_github_user()
+        github_project = create_github_project(args.create_project, owner)
+        if not github_project:
+            print("Failed to create project. Exiting.", file=sys.stderr)
+            sys.exit(1)
+    elif args.interactive or not args.github_project:
+        # Prompt for project
+        response = prompt_for_input(
+            "GitHub Project URL or number (or 'create' to make new)",
+            default="create" if args.interactive else None
+        )
+
+        if response.lower() == "create":
+            project_name_input = prompt_for_input("New project name", default=project_name)
+            owner = get_github_user()
+            github_project = create_github_project(project_name_input, owner)
+            if not github_project:
+                print("Failed to create project. Exiting.", file=sys.stderr)
+                sys.exit(1)
+        else:
+            github_project = parse_github_project(response)
+    else:
+        github_project = args.github_project
+
+    github_project = parse_github_project(github_project)
+
+    # Get optional defaults
+    if args.interactive or args.assignee:
+        assignee = args.assignee or prompt_for_input(
+            "Default assignee (GitHub username, empty for none)",
+            default=""
+        )
+    else:
+        assignee = ""
+
+    if args.interactive or args.labels:
+        labels_input = args.labels or prompt_for_input(
+            "Default labels (comma-separated, empty for none)",
+            default=""
+        )
+        labels = [l.strip() for l in labels_input.split(",") if l.strip()]
+    else:
+        labels = []
+
+    # Create metadata
+    metadata = create_work_metadata(
+        asana_task=asana_task,
+        github_project=github_project,
+        github_url=github_url,
+        project_name=project_name,
+        assignee=assignee or None,
+        labels=labels or None,
+    )
+
+    # Write file
+    write_toml_file(metadata, args.output)
+
+    print()
+    print(f"✓ Created {args.output}")
+    print()
+    print("Contents:")
+    print("─" * 60)
+    print(args.output.read_text())
+    print("─" * 60)
+    print()
+    print("This file is MODEL-MANAGED ONLY. Do not edit manually.")
+
+
+if __name__ == "__main__":
+    main()

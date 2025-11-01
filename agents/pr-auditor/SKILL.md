@@ -74,7 +74,27 @@ When invoked to review a PR (e.g., "Use pr-auditor to review PR #123"):
    gh pr view 123 --json body --jq '.body' | grep -Eo 'https://app.asana.com/[0-9]+/[0-9]+/[0-9]+'
    ```
 
-4. **Identify file types** to determine which standards to load:
+4. **Check for `.work-metadata.toml`** in repo:
+
+   **This file is created by `work-start` tool** and should exist for proper work tracking.
+
+   ```bash
+   # Verify work metadata exists
+   if [ -f .work-metadata.toml ]; then
+     ASANA_TASK=$(toml get .work-metadata.toml work.asana_task 2>/dev/null || echo "")
+     GH_PROJECT=$(toml get .work-metadata.toml work.github_project 2>/dev/null || echo "")
+
+     # Verify PR references Asana task from work metadata
+     # Verify commit messages reference GitHub issues (not Asana)
+     # Verify PR follows structure standards from workflow.issue-tracking
+   else
+     echo "WARNING: No .work-metadata.toml found."
+     echo "Work tracking integration cannot be verified."
+     echo "File should be created with: work-start --interactive"
+   fi
+   ```
+
+5. **Identify file types** to determine which standards to load:
    - `.py` files → load `python.api` or `python.full`
    - `.sql` files or migrations → load `database.all`
    - FastAPI/backend files → load `full-stack.backend`
@@ -84,6 +104,9 @@ When invoked to review a PR (e.g., "Use pr-auditor to review PR #123"):
 Before analyzing code, load relevant standards from prompter:
 
 ```bash
+# For work tracking standards (ALWAYS load for PR reviews)
+prompter workflow.issue-tracking
+
 # For Python files
 prompter run python.api
 
@@ -94,10 +117,16 @@ prompter run database.all
 prompter run full-stack.backend
 
 # Can load multiple profiles
-prompter run python.api database.all
+prompter workflow.issue-tracking python.api database.all
 ```
 
 **Critical**: Standards provide the rules to enforce. Always load standards before reviewing to ensure consistent, up-to-date enforcement.
+
+**workflow.issue-tracking provides**:
+- `.work-metadata.toml` format and usage
+- Git commit message standards
+- PR structure requirements
+- Issue/PR/Asana linking workflow
 
 ### Step 3: Analyze Code Changes
 

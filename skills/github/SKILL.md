@@ -1175,6 +1175,136 @@ Issues and PRs accept multiple formats:
 3. Use `--auto` for merge queue integration
 4. Use `--delete-branch` to clean up after merge
 
+### Work Tracking Integration
+
+**CRITICAL**: Check for `.work-metadata.toml` before GitHub operations.
+
+**This file is MODEL-MANAGED ONLY** - Never manually edit it. Created by `work-start` tool, updated by agents.
+
+**If file does not exist**, instruct operator to create it:
+```bash
+if [ ! -f .work-metadata.toml ]; then
+  echo "ERROR: .work-metadata.toml not found"
+  echo ""
+  echo "Create it using: work-start --interactive"
+  echo "See: work-start --help"
+  exit 1
+fi
+```
+
+**If file exists**, read work context:
+```bash
+# Read work context from metadata file
+ASANA_TASK=$(toml get .work-metadata.toml work.asana_task 2>/dev/null || echo "")
+GH_PROJECT=$(toml get .work-metadata.toml work.github_project 2>/dev/null || echo "")
+ASSIGNEE=$(toml get .work-metadata.toml tracking.default_assignee 2>/dev/null || echo "")
+LABELS=$(toml get .work-metadata.toml tracking.default_labels 2>/dev/null || echo "")
+```
+
+**Load work tracking standards** using the prompt skill:
+
+```bash
+# Load workflow standards for issue creation and PR management
+prompter workflow.issue-tracking
+```
+
+This provides:
+- `.work-metadata.toml` discovery and parsing
+- GitHub Issue creation standards (exhaustive context requirements)
+- PR format, structure, and references
+- Git commit message standards
+- Issue/PR/Asana linking workflow
+
+**When creating issues**:
+- Read default assignee and labels from `.work-metadata.toml`
+- Use exhaustive issue templates (context, design, acceptance criteria, test plan)
+- Link back to Asana task from work metadata in issue body
+- Apply labels from work metadata defaults
+
+**Example issue creation with work metadata**:
+```bash
+# Read metadata
+ASSIGNEE=$(toml get .work-metadata.toml tracking.default_assignee 2>/dev/null || echo "@me")
+LABELS=$(toml get .work-metadata.toml tracking.default_labels 2>/dev/null | jq -r 'join(",")')
+ASANA_TASK=$(toml get .work-metadata.toml work.asana_task 2>/dev/null || echo "")
+
+# Create issue with context
+gh issue create \
+  --title "Implement JWT validation middleware" \
+  --body "$(cat <<EOF
+## Context
+Implement JWT token validation for protected API endpoints.
+
+Related Asana task: $ASANA_TASK
+
+## Design
+Using pyjwt library with HS256 algorithm. Tokens expire after 24 hours.
+
+## Acceptance Criteria
+- [ ] Validate JWT signature
+- [ ] Check token expiry
+- [ ] Return 401 for invalid tokens
+- [ ] Unit tests with >80% coverage
+
+## Test Plan
+- Unit tests for validation logic
+- Integration tests for full auth flow
+EOF
+)" \
+  --assignee "$ASSIGNEE" \
+  --label "$LABELS"
+```
+
+**When creating PRs**:
+- Follow PR structure requirements (summary, changes, testing, related)
+- Reference GitHub issues only in commits (NOT Asana IDs)
+- Add PR link to Asana task referenced in work metadata
+- Use `Resolves #123` to auto-close issues
+
+**Example PR creation with work metadata**:
+```bash
+# Read metadata
+ASANA_TASK=$(toml get .work-metadata.toml work.asana_task 2>/dev/null || echo "")
+
+# Create PR
+gh pr create \
+  --title "feat: add JWT authentication middleware (#103)" \
+  --body "$(cat <<EOF
+## Summary
+Implements JWT token validation middleware for protected endpoints.
+
+## Changes
+- Added JWT validation middleware
+- Configured token expiry (24hr)
+- Added integration tests
+
+## Testing
+- Unit tests: pytest tests/test_auth.py
+- Integration tests: all passing
+- Manual testing with curl commands
+
+## Related
+Resolves #103
+Part of Asana task: $ASANA_TASK
+EOF
+)"
+```
+
+**Commit message format** (reference GitHub issues only):
+```bash
+# Good - references GitHub issue
+git commit -m "feat: add JWT validation middleware
+
+Implements token signature verification and expiry checking.
+
+Refs #103"
+
+# Bad - references Asana in commit
+git commit -m "feat: add JWT validation
+
+Refs ASANA-12345"  # NO - Asana references belong in PR description
+```
+
 ## Best Practices
 
 1. **Always use `--json` for parsing**: Reliable machine-readable output

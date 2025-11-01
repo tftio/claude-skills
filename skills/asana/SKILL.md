@@ -652,6 +652,132 @@ $HOME/.local/bin/asana-cli user me
 $HOME/.local/bin/asana-cli user list --output json
 ```
 
+## Work Tracking Integration
+
+**CRITICAL**: Check for `.work-metadata.toml` for current work context.
+
+**This file is MODEL-MANAGED ONLY** - Never manually edit it. Created by `work-start` tool, updated by agents.
+
+**If file does not exist**, instruct operator to create it:
+```bash
+if [ ! -f .work-metadata.toml ]; then
+  echo "ERROR: .work-metadata.toml not found"
+  echo ""
+  echo "Create it using: work-start --interactive"
+  echo "See: work-start --help"
+  exit 1
+fi
+```
+
+**If file exists**, read Asana task:
+```bash
+# Read Asana task from work metadata
+ASANA_TASK=$(toml get .work-metadata.toml work.asana_task 2>/dev/null || echo "")
+
+# Extract task GID from URL if needed
+if [[ "$ASANA_TASK" == https://app.asana.com/* ]]; then
+  TASK_ID=$(echo "$ASANA_TASK" | grep -oE '[0-9]+$')
+else
+  TASK_ID="$ASANA_TASK"
+fi
+```
+
+**Load work tracking standards** using the prompt skill:
+
+```bash
+# Load workflow standards for Asana updates
+prompter workflow.issue-tracking
+```
+
+This provides:
+- Asana update checkpoints (when to update, what to include)
+- `.work-metadata.toml` discovery and parsing
+- Linking workflow between Asana tasks and GitHub issues/PRs
+- What belongs in Asana vs GitHub
+
+### When to Update Asana
+
+**Update at checkpoints only** - Not continuously:
+
+1. **Work start**: Status → "In Progress"
+   ```bash
+   $HOME/.local/bin/asana-cli task update "$TASK_ID" \
+     --notes "$(cat <<EOF
+Starting work on this task.
+
+Breaking down into GitHub issues for detailed tracking.
+EOF
+)"
+   ```
+
+2. **GitHub issues created**: Add comment with issue links
+   ```bash
+   $HOME/.local/bin/asana-cli task comments add "$TASK_ID" \
+     --text "Created engineering tasks:
+- Authentication schema: https://github.com/org/repo/issues/101
+- JWT implementation: https://github.com/org/repo/issues/102
+- Middleware integration: https://github.com/org/repo/issues/103"
+   ```
+
+3. **PRs opened**: Add comment with PR links
+   ```bash
+   $HOME/.local/bin/asana-cli task comments add "$TASK_ID" \
+     --text "Implementation PRs:
+- https://github.com/org/repo/pull/234 (JWT + middleware)
+- https://github.com/org/repo/pull/235 (tests + docs)"
+   ```
+
+4. **Work complete**: Status → "Complete" with summary
+   ```bash
+   $HOME/.local/bin/asana-cli task update "$TASK_ID" --complete
+   $HOME/.local/bin/asana-cli task comments add "$TASK_ID" \
+     --text "$(cat <<EOF
+Completed. All PRs merged, authentication fully implemented.
+
+Summary:
+- Implemented JWT-based authentication with 24hr token expiry
+- Added middleware to all protected endpoints
+- Full test coverage including edge cases
+- API docs updated with authentication examples
+
+Delivered in PRs: #234, #235
+EOF
+)"
+   ```
+
+### What NOT to Put in Asana
+
+**Asana is for high-level product tracking only**:
+
+- ❌ **NO implementation details** - "Fixed bug in token validation logic at jwt.py:142"
+- ❌ **NO technical decisions** - "Chose HS256 over RS256 because..."
+- ❌ **NO code snippets or examples**
+- ❌ **NO debugging notes or troubleshooting**
+
+**All technical details belong in GitHub issues.**
+
+### What DOES Belong in Asana
+
+- ✅ **Status updates** - "In Progress", "Complete"
+- ✅ **Links to GitHub** - Issues and PR URLs
+- ✅ **High-level summaries** - "Authentication implemented and tested"
+- ✅ **Delivery confirmation** - "Deployed to production"
+
+### Example: Good vs Bad Asana Updates
+
+**Bad (too much technical detail)**:
+```
+Updated JWT validation middleware to use UTC-aware datetime
+comparisons instead of naive datetimes. This fixes the bug where
+tokens weren't expiring correctly due to timezone offset issues
+in the comparison logic at lines 142-145 of jwt.py.
+```
+
+**Good (high-level, links to details)**:
+```
+Fixed token expiry validation bug. Details in PR #245.
+```
+
 ## Common Workflows
 
 ### Daily Task Review

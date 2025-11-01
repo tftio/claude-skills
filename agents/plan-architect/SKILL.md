@@ -1,6 +1,6 @@
 ---
 name: plan-architect
-description: Creates structured multi-phase project plans with requirements gathering, phase breakdown, and documentation. Use when planning features, breaking down complex work, designing architecture, or creating project roadmaps. Proactively invoked when user requests planning, architecture design, or feature breakdowns.
+description: Creates structured multi-phase project plans with requirements gathering, phase breakdown, and documentation. Automatically prompts for Asana task and GitHub project to create .work-metadata.toml for tracking integration. Use when planning features, breaking down complex work, designing architecture, or creating project roadmaps. Proactively invoked when user requests planning, architecture design, or feature breakdowns.
 ---
 
 # Planning Architect
@@ -61,7 +61,13 @@ Before creating the plan, determine what technical standards apply:
    prompter run database.all      # For database work
    ```
 
-3. **Incorporate technical constraints** from the loaded standards into your planning
+3. **Load work tracking standards** (ALWAYS load this for all plans):
+   ```bash
+   # Always load work tracking to integrate with GitHub/Asana
+   prompter workflow.issue-tracking
+   ```
+
+4. **Incorporate technical constraints** from the loaded standards into your planning
 
 ### Plan Structure
 
@@ -107,29 +113,130 @@ When invoked to create a plan:
 
 2. **Identify technology stack** and load relevant standards via prompt skill
 
-3. **Create plan directory**: `docs/plans/{plan_name}/`
+3. **Create `.work-metadata.toml` using work-start tool**:
 
-4. **Write overview.md**:
+   **CRITICAL**: You MUST create `.work-metadata.toml` before proceeding. This file is MODEL-MANAGED ONLY.
+
+   Check if file exists:
+   ```bash
+   if [ ! -f .work-metadata.toml ]; then
+     echo "ERROR: .work-metadata.toml not found"
+     echo "Create it using: work-start --interactive"
+     exit 1
+   fi
+   ```
+
+   **If file does not exist**, instruct operator to create it:
+
+   ```
+   Please create .work-metadata.toml using the work-start tool:
+
+   Interactive mode (recommended):
+     work-start --interactive
+
+   Or with explicit values:
+     work-start \
+       --asana-ticket https://app.asana.com/0/1234567890/9876543210 \
+       --github-project 42 \
+       --assignee jsmith \
+       --labels "backend,authentication"
+
+   Or create a new GitHub Project:
+     work-start \
+       --asana-ticket https://app.asana.com/0/123/456 \
+       --create-project "Authentication Feature"
+   ```
+
+   Once created, read and validate the file:
+   ```bash
+   # Read work context
+   ASANA_TASK=$(toml get .work-metadata.toml work.asana_task)
+   GH_PROJECT=$(toml get .work-metadata.toml work.github_project)
+   ASSIGNEE=$(toml get .work-metadata.toml tracking.default_assignee)
+   LABELS=$(toml get .work-metadata.toml tracking.default_labels)
+
+   echo "Work context loaded:"
+   echo "  Asana task: $ASANA_TASK"
+   echo "  GitHub project: $GH_PROJECT"
+   echo "  Default assignee: $ASSIGNEE"
+   echo "  Default labels: $LABELS"
+   ```
+
+   Update Asana task to "In Progress":
+   ```bash
+   # Extract task ID from URL or use GID directly
+   TASK_ID=$(echo "$ASANA_TASK" | grep -oE '[0-9]+$')
+
+   # Update status
+   asana-cli task update "$TASK_ID" --notes "Planning started. Will create GitHub issues for tracking."
+   ```
+
+4. **Create plan directory**: `docs/plans/{plan_name}/`
+
+5. **Write overview.md**:
    - Summary for non-technical stakeholders
    - Overall definition of done
    - List all phases with their current state
    - External dependencies and approvals needed
 
-5. **Write phase_{n}.md files**:
+6. **Write phase_{n}.md files**:
    - Start with phase_1.md
    - Include explanation, rationale, brief, and TODO checklist
    - Ensure each subtask is actionable and clearly defined
-   - Link to external issues/tickets if applicable
-   - Use github skill to create issues for tracking
-   - Use asana skill to create tasks for work management
+   - **Use github skill to create issues** following issue-tracking standards:
+     - One issue per phase with full context, design, acceptance criteria, test plan
+     - Reference Asana task from `.work-metadata.toml` in issue body
+     - Apply labels from work metadata defaults
+     - Use assignee from work metadata defaults
+   - **Link created issues** in phase files and overview.md
+   - **Update Asana with checkpoint**: Add comment with links to all created GitHub issues
 
-6. **Review for completeness**:
+   **Example issue creation**:
+   ```bash
+   # Read metadata
+   ASANA_TASK=$(toml get .work-metadata.toml work.asana_task)
+   ASSIGNEE=$(toml get .work-metadata.toml tracking.default_assignee)
+   LABELS=$(toml get .work-metadata.toml tracking.default_labels | jq -r 'join(",")')
+
+   # Create issue with full context
+   gh issue create \
+     --title "Phase 1: Database schema and models" \
+     --body "$(cat <<EOF
+## Context
+Design and implement database schema for user authentication.
+
+Related Asana task: $ASANA_TASK
+
+## Design
+- Users table with email, password_hash, created_at
+- Tokens table for JWT refresh tokens
+- Use Alembic for migrations
+
+## Acceptance Criteria
+- [ ] Schema defined in models.py
+- [ ] Alembic migration created
+- [ ] Migration tested locally
+- [ ] Documentation updated
+
+## Test Plan
+- Unit tests for model validation
+- Integration tests for database operations
+EOF
+)" \
+     --assignee "$ASSIGNEE" \
+     --label "$LABELS"
+   ```
+
+7. **Review for completeness**:
    - Every acceptance criterion has a corresponding phase
    - Every phase has clear definition of done
    - All assumptions and risks are documented
    - Technical constraints from loaded standards are reflected
+   - `.work-metadata.toml` exists and is properly formatted
+   - All GitHub issues created and linked
+   - Asana task updated with issue links
 
-7. **Present plan to user** for approval
+8. **Present plan to user** for approval
 
 ## Technical Standards Integration
 
